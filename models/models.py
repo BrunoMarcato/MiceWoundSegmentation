@@ -185,7 +185,7 @@ def fcn32s(vgg16, weight_decay=0):
                 kernel_regularizer=regularizers.L2(l2=weight_decay),
                 name='score-conv7')(vgg16.get_layer('drop-conv7').output)
 
-    x = UpSampling2D(size=(32,32), name='upsample-32')(x)
+    x = UpSampling2D(size=(32,32), interpolation='bilinear', name='upsample-32')(x)
 
     x = Conv2D(filters=21, 
                 kernel_size=(1,1),
@@ -211,7 +211,7 @@ def fcn16s(vgg16, fcn32, weight_decay=0):
     returns:
         keras model
     '''
-    x = UpSampling2D(size=(2,2))(vgg16.get_layer('drop-conv7').output)
+    x = UpSampling2D(size=(2,2), interpolation='bilinear')(vgg16.get_layer('drop-conv7').output)
 
     x = Conv2D(filters=21, 
                 kernel_size=(1,1),
@@ -232,7 +232,7 @@ def fcn16s(vgg16, fcn32, weight_decay=0):
 
     m = Add(name='step4')([x,y]) ##fusion
 
-    m  = UpSampling2D(size=(16,16), name='FCN16s')(m)
+    m  = UpSampling2D(size=(16,16), interpolation='bilinear', name='FCN16s')(m)
 
     x = Conv2D(filters=21, 
                 kernel_size=(1,1),
@@ -259,7 +259,7 @@ def fcn8s(vgg16, fcn16, weight_decay=0):
         keras model
     '''
 
-    x = UpSampling2D(size=(2,2), name='upsampled-step4')(fcn16.get_layer('step4').output)
+    x = UpSampling2D(size=(2,2), interpolation='bilinear', name='upsampled-step4')(fcn16.get_layer('step4').output)
 
     x = Conv2D(filters=21, 
                 kernel_size=(1,1),
@@ -279,7 +279,7 @@ def fcn8s(vgg16, fcn16, weight_decay=0):
 
     m = Add(name='step3')([x,y])
 
-    m = UpSampling2D(size=(8,8), name='upsampled-step4')(fcn16.get_layer('step4').output)
+    m = UpSampling2D(size=(8,8), interpolation='bilinear', name='upsampled-step4')(fcn16.get_layer('step4').output)
 
     m = Conv2D(filters=21, 
                 kernel_size=(1,1),
