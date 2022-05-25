@@ -1,7 +1,39 @@
 import os
 import numpy as np
+from sklearn.model_selection import train_test_split
 
-def split_dataset(DATASET_PATH='rats_data', holdout=80):
+#Split dataset using sklearn.model_selection.train_test_split
+
+def split_dataset(DATASET_PATH='rats_data', holdout=0.8):
+    images = []
+    labels = []
+
+    treatments = os.listdir(DATASET_PATH)
+    for treatment in treatments:
+        if treatment == 'CIC' or treatment == 'PDX':
+            days = os.listdir(os.path.join(DATASET_PATH, treatment))
+            for day in days:
+                animals = os.listdir(os.path.join(DATASET_PATH, treatment, day))
+                for animal in animals:
+                    path = os.path.join(DATASET_PATH, treatment, day, animal)
+                    images.append(os.path.join(path, animal+'.png'))
+                    labels.append(os.path.join(path, animal+'_label.png'))
+        else:
+            doses = os.listdir(os.path.join(DATASET_PATH, treatment))
+            for dose in doses:
+                days = os.listdir(os.path.join(DATASET_PATH, treatment, dose))
+                for day in days:
+                    animals = os.listdir(os.path.join(DATASET_PATH, treatment, dose, day))
+                    for animal in animals:
+                        path = os.path.join(DATASET_PATH, treatment, dose, day, animal)
+                        images.append(os.path.join(path, animal+'.png'))
+                        labels.append(os.path.join(path, animal+'_label.png'))
+
+    return train_test_split(images, labels, test_size=1-holdout, random_state=np.random.randint(0,1000000))
+
+#Split dataset without using sklearn.model_selection.train_test_split
+
+def split_dataset2(DATASET_PATH='rats_data', holdout=80):
     pair = []
 
     treatments = os.listdir(DATASET_PATH)
