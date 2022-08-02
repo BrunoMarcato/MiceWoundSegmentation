@@ -4,6 +4,7 @@ FCN models file
 
 import numpy as np
 import tensorflow as tf
+from tensorflow import keras
 from tensorflow.keras import regularizers, initializers, Input, Model
 from tensorflow.keras.layers import MaxPool2D, Conv2D, Conv2DTranspose, Lambda, Dropout, Add, UpSampling2D
 
@@ -160,6 +161,13 @@ def vgg16(weight_decay=0, dropout=0.5):
 
     x = Dropout(rate=dropout, name='drop-conv7')(x)
 
+    x = Conv2D(filters=1000,
+                kernel_size=(1,1),
+                strides=(1,1),
+                padding='same',
+                activation='softmax',
+                name='inference_pred')(x)
+
     return Model(input, x)
 
 
@@ -172,7 +180,6 @@ def fcn32s(vgg16, weight_decay=0):
         vgg16: VGG16 model
         fcn16: FCN16 model
         weight_decay = L2 regularization factor (float), weight_decay=0 by default
-
     returns:
         keras model
     '''
@@ -185,15 +192,11 @@ def fcn32s(vgg16, weight_decay=0):
                 kernel_regularizer=regularizers.L2(l2=weight_decay),
                 name='score-conv7')(vgg16.get_layer('drop-conv7').output)
 
-    x = UpSampling2D(size=(32,32), interpolation='bilinear', name='upsample-32')(x)
-
-    x = Conv2D(filters=21, 
-                kernel_size=(1,1),
-                strides=(1,1),
-                padding='same',
-                activation='linear',
-                kernel_regularizer=regularizers.L2(l2=weight_decay),
-                name='FCN32s')(x)
+    x = Conv2DTranspose(filters=21, kernel_size=(64,64), strides=(32,32),
+                          padding='same', use_bias=False, activation='softmax',
+                          kernel_initializer=BilinearInitializer(),
+                          kernel_regularizer=regularizers.L2(l2=weight_decay),
+                          name='FCN32s')(x)
 
     return Model(vgg16.input, x)
 
@@ -207,19 +210,14 @@ def fcn16s(vgg16, fcn32, weight_decay=0):
         vgg16: VGG16 custom keras model
         fcn32: FCN32 custom keras model
         weight_decay = L2 regularization factor (float), weight_decay=0 by default
-
     returns:
         keras model
     '''
-    x = UpSampling2D(size=(2,2), interpolation='bilinear')(vgg16.get_layer('drop-conv7').output)
-
-    x = Conv2D(filters=21, 
-                kernel_size=(1,1),
-                strides=(1,1),
-                padding='same',
-                activation='linear',
-                kernel_regularizer=regularizers.L2(l2=weight_decay),
-                name='upsample-conv7')(x)
+    x = Conv2DTranspose(filters=21, kernel_size=(64,64), strides=(32,32),
+                                     padding='same', use_bias=False, activation='softmax',
+                                     kernel_initializer=BilinearInitializer(),
+                                     kernel_regularizer=regularizers.L2(l2=weight_decay),
+                                     name='score7_upsample')(vgg16.get_layer('drop-conv7').output)
 
     y = Conv2D(filters=21, 
                 kernel_size=(1,1), 
@@ -232,15 +230,11 @@ def fcn16s(vgg16, fcn32, weight_decay=0):
 
     m = Add(name='step4')([x,y]) ##fusion
 
-    m  = UpSampling2D(size=(16,16), interpolation='bilinear', name='FCN16s')(m)
-
-    x = Conv2D(filters=21, 
-                kernel_size=(1,1),
-                strides=(1,1),
-                padding='same',
-                activation='linear',
-                kernel_regularizer=regularizers.L2(l2=weight_decay),
-                name='FCN16s')(m)
+    m = Conv2DTranspose(filters=21, kernel_size=(64,64), strides=(32,32),
+                                     padding='same', use_bias=False, activation='softmax',
+                                     kernel_initializer=BilinearInitializer(),
+                                     kernel_regularizer=regularizers.L2(l2=weight_decay),
+                                     name='FCN16s')(m)
 
     return Model(fcn32.input, m)
 
@@ -254,20 +248,15 @@ def fcn8s(vgg16, fcn16, weight_decay=0):
         vgg16: VGG16 custom keras model
         fcn16: FCN16 custom keras model
         weight_decay = L2 regularization factor (float), weight_decay=0 by default
-
     returns:
         keras model
     '''
 
-    x = UpSampling2D(size=(2,2), interpolation='bilinear', name='upsampled-step4')(fcn16.get_layer('step4').output)
-
-    x = Conv2D(filters=21, 
-                kernel_size=(1,1),
-                strides=(1,1),
-                padding='same',
-                activation='linear',
-                kernel_regularizer=regularizers.L2(l2=weight_decay),
-                name='upsample-step4')(x)
+    x = Conv2DTranspose(filters=21, kernel_size=(4,4), strides=(2,2),
+                                        padding='same', use_bias=False, activation='linear',
+                                        kernel_initializer=BilinearInitializer(),
+                                        kernel_regularizer=regularizers.L2(l2=weight_decay),
+                                        name='skip4_upsample')(fcn16.get_layer('step4').output)
 
     y = Conv2D(filters=21, 
                 kernel_size=(1,1), 
@@ -279,14 +268,28 @@ def fcn8s(vgg16, fcn16, weight_decay=0):
 
     m = Add(name='step3')([x,y])
 
-    m = UpSampling2D(size=(8,8), interpolation='bilinear', name='upsampled-step4')(fcn16.get_layer('step4').output)
-
-    m = Conv2D(filters=21, 
-                kernel_size=(1,1),
-                strides=(1,1),
-                padding='same',
-                activation='linear',
-                kernel_regularizer=regularizers.L2(l2=weight_decay),
-                name='upsample-step4')(m)
+    m = Conv2DTranspose(filters=21, kernel_size=(16,16), strides=(8,8),
+                                     padding='same', use_bias=False, activation='softmax',
+                                     kernel_initializer=BilinearInitializer(),
+                                     kernel_regularizer=regularizers.L2(l2=weight_decay),
+                                     name='FCN8s')(m)
 
     return Model(fcn16.input, m)
+
+class BilinearInitializer(initializers.Initializer):
+  '''Initializer for Conv2DTranspose to perform bilinear interpolation on each channel.'''
+  def __call__(self, shape, dtype=None, **kwargs):
+      kernel_size, _, filters, _ = shape
+      arr = np.zeros((kernel_size, kernel_size, filters, filters))
+      ## make filter that performs bilinear interpolation through Conv2DTranspose
+      upscale_factor = (kernel_size+1)//2
+      if kernel_size % 2 == 1:
+          center = upscale_factor - 1
+      else:
+          center = upscale_factor - 0.5
+      og = np.ogrid[:kernel_size, :kernel_size]
+      kernel = (1-np.abs(og[0]-center)/upscale_factor) * \
+              (1-np.abs(og[1]-center)/upscale_factor) # kernel shape is (kernel_size, kernel_size)
+      for i in range(filters):
+          arr[..., i, i] = kernel
+      return tf.convert_to_tensor(arr, dtype=dtype)
