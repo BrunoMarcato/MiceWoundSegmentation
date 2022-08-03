@@ -172,7 +172,7 @@ def vgg16(weight_decay=0, dropout=0.5):
 
 
 
-def fcn32s(vgg16, weight_decay=0):
+def fcn32s(vgg16, filters=21, weight_decay=0):
     '''
     32x upsampled
     
@@ -184,7 +184,7 @@ def fcn32s(vgg16, weight_decay=0):
         keras model
     '''
 
-    x = Conv2D(filters=21, 
+    x = Conv2D(filters=filters, 
                 kernel_size=(1,1), 
                 strides=(1,1), 
                 padding='same', 
@@ -192,7 +192,7 @@ def fcn32s(vgg16, weight_decay=0):
                 kernel_regularizer=regularizers.L2(l2=weight_decay),
                 name='score-conv7')(vgg16.get_layer('drop-conv7').output)
 
-    x = Conv2DTranspose(filters=21, kernel_size=(64,64), strides=(32,32),
+    x = Conv2DTranspose(filters=filters, kernel_size=(64,64), strides=(32,32),
                           padding='same', use_bias=False, activation='softmax',
                           kernel_initializer=BilinearInitializer(),
                           kernel_regularizer=regularizers.L2(l2=weight_decay),
@@ -202,7 +202,7 @@ def fcn32s(vgg16, weight_decay=0):
 
 
 
-def fcn16s(vgg16, fcn32, weight_decay=0):
+def fcn16s(vgg16, fcn32, filters=21, weight_decay=0):
     '''
     16x upsampled 
     
@@ -213,13 +213,13 @@ def fcn16s(vgg16, fcn32, weight_decay=0):
     returns:
         keras model
     '''
-    x = Conv2DTranspose(filters=21, kernel_size=(64,64), strides=(32,32),
-                                     padding='same', use_bias=False, activation='softmax',
-                                     kernel_initializer=BilinearInitializer(),
-                                     kernel_regularizer=regularizers.L2(l2=weight_decay),
-                                     name='score7_upsample')(vgg16.get_layer('drop-conv7').output)
+    x = Conv2DTranspose(filters=filters, kernel_size=(32,32), strides=(16,16),
+                        padding='same', use_bias=False, activation='linear',
+                        kernel_initializer=BilinearInitializer(),
+                        kernel_regularizer=regularizers.L2(l2=weight_decay),
+                        name='score7_upsample')(vgg16.get_layer('score-conv7').output)
 
-    y = Conv2D(filters=21, 
+    y = Conv2D(filters=filters, 
                 kernel_size=(1,1), 
                 strides=(1,1),
                 padding='same',  
@@ -230,7 +230,7 @@ def fcn16s(vgg16, fcn32, weight_decay=0):
 
     m = Add(name='step4')([x,y]) ##fusion
 
-    m = Conv2DTranspose(filters=21, kernel_size=(64,64), strides=(32,32),
+    m = Conv2DTranspose(filters=filters, kernel_size=(64,64), strides=(32,32),
                                      padding='same', use_bias=False, activation='softmax',
                                      kernel_initializer=BilinearInitializer(),
                                      kernel_regularizer=regularizers.L2(l2=weight_decay),
@@ -240,7 +240,7 @@ def fcn16s(vgg16, fcn32, weight_decay=0):
 
     
 
-def fcn8s(vgg16, fcn16, weight_decay=0):
+def fcn8s(vgg16, fcn16, filters=21, weight_decay=0):
     '''
     8x upsampled
     
@@ -252,13 +252,13 @@ def fcn8s(vgg16, fcn16, weight_decay=0):
         keras model
     '''
 
-    x = Conv2DTranspose(filters=21, kernel_size=(4,4), strides=(2,2),
+    x = Conv2DTranspose(filters=filters, kernel_size=(4,4), strides=(2,2),
                                         padding='same', use_bias=False, activation='linear',
                                         kernel_initializer=BilinearInitializer(),
                                         kernel_regularizer=regularizers.L2(l2=weight_decay),
                                         name='skip4_upsample')(fcn16.get_layer('step4').output)
 
-    y = Conv2D(filters=21, 
+    y = Conv2D(filters=filters, 
                 kernel_size=(1,1), 
                 strides=(1,1), 
                 padding='same', 
@@ -268,7 +268,7 @@ def fcn8s(vgg16, fcn16, weight_decay=0):
 
     m = Add(name='step3')([x,y])
 
-    m = Conv2DTranspose(filters=21, kernel_size=(16,16), strides=(8,8),
+    m = Conv2DTranspose(filters=filters, kernel_size=(16,16), strides=(8,8),
                                      padding='same', use_bias=False, activation='softmax',
                                      kernel_initializer=BilinearInitializer(),
                                      kernel_regularizer=regularizers.L2(l2=weight_decay),
