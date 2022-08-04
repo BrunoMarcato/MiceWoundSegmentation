@@ -60,7 +60,7 @@ def augment_data(images, masks, save_images, save_masks, H=1024, W=768, save_pat
             i = cv2.resize(i, (W, H))
             m = cv2.resize(m, (W, H))
 
-            if save_path is not None:
+            if save_path:
                 if len(images) == 1:
                     tmp_img_name = f"{image_name}.{image_extn}"
                     tmp_mask_name = f"{mask_name}.{mask_extn}"
