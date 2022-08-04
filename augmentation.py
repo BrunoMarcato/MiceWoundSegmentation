@@ -4,9 +4,12 @@ from tqdm import tqdm #to create a task bar
 from glob import glob
 from albumentations import CenterCrop, RandomRotate90, GridDistortion, HorizontalFlip, VerticalFlip
 
-def augment_data(images, masks, save_list_images, save_list_masks):
-    H = 1024
-    W = 768
+#---------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------
+
+def augment_data(images, masks, save_images, save_masks, H=1024, W=768, save_path=None):
+
+    #TODO: Document the parameters
 
     for x, y in tqdm(zip(images, masks), total=len(images)):
         name = x.split("/")[-1].split(".")
@@ -57,22 +60,25 @@ def augment_data(images, masks, save_list_images, save_list_masks):
             i = cv2.resize(i, (W, H))
             m = cv2.resize(m, (W, H))
 
-            if len(images) == 1:
-                tmp_img_name = f"{image_name}.{image_extn}"
-                tmp_mask_name = f"{mask_name}.{mask_extn}"
+            if save_path is not None:
+                if len(images) == 1:
+                    tmp_img_name = f"{image_name}.{image_extn}"
+                    tmp_mask_name = f"{mask_name}.{mask_extn}"
 
-            else:
-                tmp_img_name = f"{image_name}_{idx}.{image_extn}"
-                tmp_mask_name = f"{mask_name}_{idx}.{mask_extn}"
+                else:
+                    tmp_img_name = f"{image_name}_{idx}.{image_extn}"
+                    tmp_mask_name = f"{mask_name}_{idx}.{mask_extn}"
 
-            #image_path = os.path.join(save_path, "images", tmp_img_name)
-            #mask_path = os.path.join(save_path, "masks", tmp_mask_name)
+                image_path = os.path.join(save_path, "images", tmp_img_name)
+                mask_path = os.path.join(save_path, "labels", tmp_mask_name)
 
-            #cv2.imwrite(image_path, i)
-            #cv2.imwrite(mask_path, m)
+                cv2.imwrite(image_path, i)
+                cv2.imwrite(mask_path, m)
 
-            save_list_images.append(i)
-            save_list_masks.append(m)
+                idx += 1
 
+            save_images.append(i)
+            save_masks.append(m)
 
-            idx += 1
+#---------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------
