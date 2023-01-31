@@ -134,12 +134,12 @@ def remove_folder_contents(path):
 
 # -----------------------------------------------------------------------------------------------
 
-def split_dataset(root_path, 
+def split_dataset(data_path, 
                   train_images_path, train_masks_path, 
                   val_images_path, val_masks_path, 
                   holdout=0.8, seed=42):
 
-  files = [i for i in os.listdir(root_path) if os.path.isfile(os.path.join(root_path, i))]
+  files = [i for i in os.listdir(data_path) if os.path.isfile(os.path.join(data_path, i))]
 
   images = []
   masks = []
@@ -161,15 +161,15 @@ def split_dataset(root_path,
   remove_folder_contents(val_masks_path)
 
   for f in X_train:
-      copy2(os.path.join('data/total_data', f), os.path.join(train_images_path, f))
+      copy2(os.path.join(data_path, f), os.path.join(train_images_path, f))
 
   for f in y_train:
-      copy2(os.path.join('data/total_data', f), os.path.join(train_masks_path, f))
+      copy2(os.path.join(data_path, f), os.path.join(train_masks_path, f))
 
   for f in X_val:
-      copy2(os.path.join('data/total_data', f), os.path.join(val_images_path, f))
+      copy2(os.path.join(data_path, f), os.path.join(val_images_path, f))
 
   for f in y_val:
-      copy2(os.path.join('data/total_data', f), os.path.join(val_masks_path, f))
+      copy2(os.path.join(data_path, f), os.path.join(val_masks_path, f))
 
 # -----------------------------------------------------------------------------------------------
