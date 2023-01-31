@@ -1,10 +1,10 @@
 import torch
+import numpy as np
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
-import matplotlib.pyplot as plt
 from model import UNet
 from utils import (
    load_checkpoint,
@@ -13,6 +13,7 @@ from utils import (
    metrics,
    save_preds,
    plot_loss_curve,
+   split_dataset
 )
 
 # -----------------------------------------------------------------------------------------------
@@ -25,9 +26,11 @@ BATCH_SIZE = 2
 NUM_EPOCHS = 100
 IMAGE_HEIGHT = 256
 IMAGE_WIDTH = 256
+HOLDOUT = 0.8 # Percentage of training images
 NUM_WORKERS = 2
 LOAD_MODEL = False
 PIN_MEMORY = True
+ROOT_DIR = "data/total_data"
 TRAIN_IMG_DIR = "data/train_images/"
 TRAIN_MASK_DIR = "data/train_masks/"
 VAL_IMG_DIR = "data/val_images/"
@@ -111,6 +114,15 @@ def main():
   model = UNet(in_channels = 3, out_channels = 1).to(DEVICE)
   loss_function = nn.BCEWithLogitsLoss() #binary cross entropy with logits
   optimizer = optim.Adam(model.parameters(), lr = LEARNING_RATE)
+
+  split_dataset(ROOT_DIR, 
+    TRAIN_IMG_DIR,
+    TRAIN_MASK_DIR,
+    VAL_IMG_DIR,
+    VAL_MASK_DIR,
+    holdout= HOLDOUT,
+    seed = np.random.randint(1000000)
+  )
 
   train_loader, val_loader = get_loaders(
       TRAIN_IMG_DIR,
