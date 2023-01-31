@@ -1,14 +1,16 @@
+import os
 import torch
 import torchvision
+from sklearn.model_selection import train_test_split
 from dataset import RatsDataset
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
-import numpy as np
+from shutil import copy2
 
 # -----------------------------------------------------------------------------------------------
 
 def save_checkpoint(state, filename = "my_checkpoint.pth.tar"):
-  print(" ... Saving checkpoint ...")
+  print("... Saving checkpoint ...")
   torch.save(state, filename)
 
 # -----------------------------------------------------------------------------------------------
@@ -20,9 +22,9 @@ def load_checkpoint(checkpoint, model):
 # -----------------------------------------------------------------------------------------------
 
 def get_loaders(
-    train_dir,
+    train_image_dir,
     train_mask_dir,
-    val_dir,
+    val_image_dir,
     val_mask_dir,
     batch_size,
     train_transform,
@@ -31,7 +33,7 @@ def get_loaders(
     pin_memory = True
 ):
   train_dataset = RatsDataset(
-      img_dir = train_dir,
+      img_dir = train_image_dir,
       mask_dir = train_mask_dir,
       transform = train_transform
   )
@@ -45,7 +47,7 @@ def get_loaders(
   )
 
   val_dataset = RatsDataset(
-      img_dir = val_dir,
+      img_dir = val_image_dir,
       mask_dir = val_mask_dir,
       transform = val_transform
   )
@@ -115,5 +117,59 @@ def plot_loss_curve(train_loss, path):
     #plt.plot(val_loss, color='red')
 
     plt.savefig(path)
+
+# -----------------------------------------------------------------------------------------------
+
+def remove_folder_contents(path):
+  files = os.listdir(path)
+  if len(files) == 0:
+    return
+  else:
+    for filename in files:
+      try:
+        file = os.path.join(path, filename)
+        os.remove(file)
+      except OSError as e:
+        print(f'Failed to delete {file}; Reason: {e}')
+
+# -----------------------------------------------------------------------------------------------
+
+def split_dataset(root_path, 
+                  train_images_path, train_masks_path, 
+                  val_images_path, val_masks_path, 
+                  holdout=0.8, seed=42):
+
+  files = [i for i in os.listdir(root_path) if os.path.isfile(os.path.join(root_path, i))]
+
+  images = []
+  masks = []
+  for f in files:
+      if f.endswith('_mask.png'):
+          masks.append(f)
+      else:
+          images.append(f)
+
+  images.sort(key = lambda f: int(''.join(filter(str.isdigit, f))))
+  masks.sort(key = lambda f: int(''.join(filter(str.isdigit, f))))
+
+  X_train, X_val, y_train, y_val = train_test_split(images, masks, random_state = seed, test_size = 1-holdout)
+
+
+  remove_folder_contents(train_images_path)
+  remove_folder_contents(train_masks_path)
+  remove_folder_contents(val_images_path)
+  remove_folder_contents(val_masks_path)
+
+  for f in X_train:
+      copy2(os.path.join('data/total_data', f), os.path.join(train_images_path, f))
+
+  for f in y_train:
+      copy2(os.path.join('data/total_data', f), os.path.join(train_masks_path, f))
+
+  for f in X_val:
+      copy2(os.path.join('data/total_data', f), os.path.join(val_images_path, f))
+
+  for f in y_val:
+      copy2(os.path.join('data/total_data', f), os.path.join(val_masks_path, f))
 
 # -----------------------------------------------------------------------------------------------
