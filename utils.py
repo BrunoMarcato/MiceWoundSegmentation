@@ -26,9 +26,12 @@ def get_loaders(
     train_mask_dir,
     val_image_dir,
     val_mask_dir,
+    test_image_dir,
+    test_mask_dir,
     batch_size,
     train_transform,
     val_transform,
+    test_transform,
     num_workers = 4,
     pin_memory = True
 ):
@@ -60,7 +63,21 @@ def get_loaders(
       shuffle = False
   )
 
-  return train_loader, val_loader
+  test_dataset = RatsDataset(
+      img_dir = test_image_dir,
+      mask_dir = test_mask_dir,
+      transform = test_transform
+  )
+
+  test_loader = DataLoader(
+      test_dataset,
+      batch_size = batch_size,
+      num_workers = num_workers,
+      pin_memory = pin_memory,
+      shuffle = True
+  )
+
+  return train_loader, val_loader, test_loader
 
 # -----------------------------------------------------------------------------------------------
 
