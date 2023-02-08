@@ -121,7 +121,7 @@ def main():
     VAL_IMG_DIR,
     VAL_MASK_DIR,
     holdout= HOLDOUT,
-    seed = np.random.randint(1000000)
+    seed = 1
   )
 
   train_loader, val_loader = get_loaders(
