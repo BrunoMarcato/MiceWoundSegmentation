@@ -102,7 +102,6 @@ def metrics(loader, model, device="cuda"):
     print(f"--> Accuracy: {num_correct/num_pixels*100:.2f}")
     print(f"--> Dice score: {dice_score/len(loader)}")
 
-
     model.train()
 
 # -----------------------------------------------------------------------------------------------
@@ -152,41 +151,58 @@ def remove_folder_contents(path):
 # -----------------------------------------------------------------------------------------------
 
 def split_dataset(data_path, 
-                  train_images_path, train_masks_path, 
+                  train_images_path, train_masks_path,
                   val_images_path, val_masks_path, 
-                  holdout=0.8, seed=42):
+                  test_images_path, test_masks_path, 
+                  test_size=0.2, val_size=0.2, seed=42):
 
-  files = [i for i in os.listdir(data_path) if os.path.isfile(os.path.join(data_path, i))]
+    #tip: val_size refers to the percentage over the train subset
 
-  images = []
-  masks = []
-  for f in files:
-      if f.endswith('_mask.png'):
-          masks.append(f)
-      else:
-          images.append(f)
+    files = [i for i in os.listdir(data_path) if os.path.isfile(os.path.join(data_path, i))]
 
-  images.sort(key = lambda f: int(''.join(filter(str.isdigit, f))))
-  masks.sort(key = lambda f: int(''.join(filter(str.isdigit, f))))
+    images = []
+    masks = []
+    for f in files:
+        if f.endswith('_mask.png'):
+            masks.append(f)
+        else:
+            images.append(f)
 
-  X_train, X_val, y_train, y_val = train_test_split(images, masks, random_state = seed, test_size = 1-holdout)
+    images.sort(key = lambda f: int(''.join(filter(str.isdigit, f))))
+    masks.sort(key = lambda f: int(''.join(filter(str.isdigit, f))))
+
+    X_train, X_test, y_train, y_test = train_test_split(images, masks, random_state = seed, test_size = test_size)
 
 
-  remove_folder_contents(train_images_path)
-  remove_folder_contents(train_masks_path)
-  remove_folder_contents(val_images_path)
-  remove_folder_contents(val_masks_path)
+    remove_folder_contents(train_images_path)
+    remove_folder_contents(train_masks_path)
+    remove_folder_contents(val_images_path)
+    remove_folder_contents(val_masks_path)
+    remove_folder_contents(test_images_path)
+    remove_folder_contents(test_masks_path)
 
-  for f in X_train:
-      copy2(os.path.join(data_path, f), os.path.join(train_images_path, f))
+    counter = 0
+    for f in X_train:
+        copy2(os.path.join(data_path, f), os.path.join(train_images_path, f))
 
-  for f in y_train:
-      copy2(os.path.join(data_path, f), os.path.join(train_masks_path, f))
+        if counter < int(val_size*len(X_train)):
+            copy2(os.path.join(data_path, f), os.path.join(val_images_path, f))
 
-  for f in X_val:
-      copy2(os.path.join(data_path, f), os.path.join(val_images_path, f))
+        counter += 1
 
-  for f in y_val:
-      copy2(os.path.join(data_path, f), os.path.join(val_masks_path, f))
+    counter = 0
+    for f in y_train:
+        copy2(os.path.join(data_path, f), os.path.join(train_masks_path, f))
+
+        if counter < int(val_size*len(X_train)):
+            copy2(os.path.join(data_path, f), os.path.join(val_masks_path, f))
+        
+        counter += 1
+
+    for f in X_test:
+        copy2(os.path.join(data_path, f), os.path.join(test_images_path, f))
+
+    for f in y_test:
+        copy2(os.path.join(data_path, f), os.path.join(test_masks_path, f))
 
 # -----------------------------------------------------------------------------------------------

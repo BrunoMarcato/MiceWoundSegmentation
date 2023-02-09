@@ -26,15 +26,18 @@ BATCH_SIZE = 2
 NUM_EPOCHS = 100
 IMAGE_HEIGHT = 256
 IMAGE_WIDTH = 256
-HOLDOUT = 0.8 # Percentage of training images
+TEST_SIZE = 0.2
+VAL_SIZE = 0.1 # percentage over training images 
 NUM_WORKERS = 2
 LOAD_MODEL = False
 PIN_MEMORY = True
-ROOT_DIR = "data/total_data"
+ROOT_DIR = "data/all_data"
 TRAIN_IMG_DIR = "data/train_images/"
 TRAIN_MASK_DIR = "data/train_masks/"
 VAL_IMG_DIR = "data/val_images/"
 VAL_MASK_DIR = "data/val_masks/"
+TEST_IMG_DIR = "data/test_images/"
+TEST_MASK_DIR = "data/test_masks/"
 
 # -----------------------------------------------------------------------------------------------
 
@@ -102,14 +105,32 @@ def main():
   val_transforms = A.Compose(
       [
           A.Resize(height=IMAGE_HEIGHT, width=IMAGE_WIDTH),
-          A.Normalize(
-              mean=[0.0, 0.0, 0.0],
-              std=[1.0, 1.0, 1.0],
-              max_pixel_value=255.0,
-          ),
-          ToTensorV2(),
+            A.Rotate(limit=35, p=1.0),
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.1),
+            A.Normalize(
+                mean=[0.0, 0.0, 0.0],
+                std=[1.0, 1.0, 1.0],
+                max_pixel_value=255.0,
+            ),
+            ToTensorV2(),
       ]
   )
+
+  test_transforms = A.Compose(
+        [
+            A.Resize(height=IMAGE_HEIGHT, width=IMAGE_WIDTH),
+            A.Rotate(limit=35, p=1.0),
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.1),
+            A.Normalize(
+                mean=[0.0, 0.0, 0.0],
+                std=[1.0, 1.0, 1.0],
+                max_pixel_value=255.0,
+            ),
+            ToTensorV2(),
+        ]
+    )
 
   model = UNet(in_channels = 3, out_channels = 1).to(DEVICE)
   loss_function = nn.BCEWithLogitsLoss() #binary cross entropy with logits
@@ -120,18 +141,24 @@ def main():
     TRAIN_MASK_DIR,
     VAL_IMG_DIR,
     VAL_MASK_DIR,
-    holdout= HOLDOUT,
+    TEST_IMG_DIR,
+    TEST_MASK_DIR,
+    test_size = TEST_SIZE,
+    val_size = VAL_SIZE,
     seed = 1
   )
 
-  train_loader, val_loader = get_loaders(
+  train_loader, val_loader, test_loader = get_loaders(
       TRAIN_IMG_DIR,
       TRAIN_MASK_DIR,
       VAL_IMG_DIR,
       VAL_MASK_DIR,
+      TEST_IMG_DIR,
+      TEST_MASK_DIR,
       BATCH_SIZE,
       train_transforms,
       val_transforms,
+      test_transforms,
       NUM_WORKERS,
       PIN_MEMORY
   )
