@@ -71,8 +71,8 @@ def get_loaders(
 
   test_loader = DataLoader(
       test_dataset,
-      batch_size = batch_size,
-      num_workers = num_workers,
+      batch_size = 1,
+      num_workers = 0,
       pin_memory = pin_memory,
       shuffle = True
   )
@@ -81,32 +81,54 @@ def get_loaders(
 
 # -----------------------------------------------------------------------------------------------
 
-def metrics(loader, model, device="cuda"):
-    num_correct = 0
-    num_pixels = 0
+def metrics(loader, model, mode = 'val', device="cuda"):
     dice_score = 0
 
     model.eval()
 
-    with torch.no_grad():
-        for x, y in loader:
-            x = x.to(device)
-            y = y.to(device).unsqueeze(1)
-            preds = torch.sigmoid(model(x))
-            preds = (preds > 0.5).float()
-            num_correct += (preds == y).sum()
-            num_pixels += torch.numel(preds)
-            dice_score += (2 * (preds * y).sum()) / ((preds + y).sum()) + 1e-8
-            
-    print(f"--> Correct pixels: {num_correct}; Total pixels: {num_pixels}")
-    print(f"--> Accuracy: {num_correct/num_pixels*100:.2f}")
-    print(f"--> Dice score: {dice_score/len(loader)}")
+    if mode == 'val':
+        num_correct = 0
+        num_pixels = 0
+
+        with torch.no_grad():
+            for x, y in loader:
+                x = x.to(device)
+                y = y.to(device).unsqueeze(1)
+                preds = torch.sigmoid(model(x))
+                preds = (preds > 0.5).float()
+                num_correct += (preds == y).sum()
+                num_pixels += torch.numel(preds)
+                dice_score += (2. * (preds * y).sum()) / ((preds + y).sum() + 1e-8)
+                
+        print(f"--> Correct pixels: {num_correct}; Total pixels: {num_pixels}")
+        print(f"--> Accuracy: {num_correct/num_pixels*100:.2f}")
+        print(f"--> Dice score: {dice_score/len(loader)}")
+    
+    elif mode == 'test':
+        dice_scores = []
+        with torch.no_grad():
+            for x, y in loader:
+                x = x.to(device)
+                y = y.to(device).unsqueeze(1)
+                preds = torch.sigmoid(model(x))
+                preds = (preds > 0.5).float()
+
+                dice_score = (2. * (preds * y).sum()) / ((preds + y).sum() + 1e-8)
+                dice_scores.append(dice_score)
+        
+        model.train()
+
+        return dice_scores
+
+    else:
+        raise ValueError(f'{mode} is an invalid mode. Allowed values: [\'val\',  \'test\']')
+
 
     model.train()
 
 # -----------------------------------------------------------------------------------------------
 
-def save_preds(loader, model, folder="saved_images/", device="cuda"):
+def save_preds(loader, model, num_exec, folder="test_images_pred/", device="cuda"):
 
     model.eval()
     
@@ -115,7 +137,8 @@ def save_preds(loader, model, folder="saved_images/", device="cuda"):
         with torch.no_grad():
             preds = torch.sigmoid(model(x))
             preds = (preds > 0.5).float()
-        torchvision.utils.save_image(preds, f"{folder}/pred_{idx}.png")
+        #{nome do modelo}_{numero da execução}_{nome da imagem}.png
+        torchvision.utils.save_image(preds, f"{folder}/{model.name}_{num_exec}_{idx}.png")
         torchvision.utils.save_image(y.unsqueeze(1), f"{folder}{idx}.png")
 
     model.train()

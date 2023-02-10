@@ -1,8 +1,9 @@
-import torch
 import numpy as np
+import pandas as pd
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 from tqdm import tqdm
+import torch
 import torch.nn as nn
 import torch.optim as optim
 from model import UNet
@@ -23,7 +24,7 @@ from utils import (
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 LEARNING_RATE = 1e-3
 BATCH_SIZE = 2
-NUM_EPOCHS = 100
+NUM_EPOCHS = 30
 IMAGE_HEIGHT = 256
 IMAGE_WIDTH = 256
 TEST_SIZE = 0.2
@@ -145,7 +146,7 @@ def main():
     TEST_MASK_DIR,
     test_size = TEST_SIZE,
     val_size = VAL_SIZE,
-    seed = 1
+    seed = 2
   )
 
   train_loader, val_loader, test_loader = get_loaders(
@@ -163,10 +164,8 @@ def main():
       PIN_MEMORY
   )
 
-  # if LOAD_MODEL:
-  #   load_checkpoint(torch.load("my_checkpoint.pth.tar"), model)
-
-  #   metrics(val_loader, model, device = DEVICE)
+  if LOAD_MODEL:
+    load_checkpoint(torch.load("my_checkpoint.pth.tar"), model)
 
   scaler = torch.cuda.amp.GradScaler()
   for _ in range(NUM_EPOCHS):
@@ -178,12 +177,18 @@ def main():
     save_checkpoint(checkpoint)
 
     # check some metrics (accuracy, dice score)
-    metrics(val_loader, model, device = DEVICE)
+    metrics(val_loader, model, mode = 'val', device = DEVICE)
 
-    # print predictions in a folder
-    save_preds(val_loader, model, folder = "saved_images/", device = DEVICE)
+    plot_loss_curve(TRAIN_LOSSES, 'plots/loss2.png')
 
-    plot_loss_curve(TRAIN_LOSSES, 'plots/train_loss.png')
+  # for imagens de teste; calcular o dice score dessa imagem, assim como a predição dela; colocar a predição numa pasta no formato {nome do modelo}_{numero da execução}_{nome da imagem}.png; exportar o vetor de dice score como dataframe
+  dice_scores = metrics(test_loader, model, mode = 'test', device = DEVICE)
+  dice_scores = np.array(dice_scores)
+  df = pd.DataFrame(dice_scores)
+  df.to_csv('dice_scores.csv', index=False, encoding='utf-8')
+
+  # print predictions in a folder
+  save_preds(test_loader, model, num_exec=1, folder = "test_images_pred/", device = DEVICE)
 
 # -----------------------------------------------------------------------------------------------
 
