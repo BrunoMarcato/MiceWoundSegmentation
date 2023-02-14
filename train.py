@@ -24,7 +24,7 @@ from utils import (
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 LEARNING_RATE = 1e-3
 BATCH_SIZE = 2
-NUM_EPOCHS = 30
+NUM_EPOCHS = 1
 IMAGE_HEIGHT = 256
 IMAGE_WIDTH = 256
 TEST_SIZE = 0.2
@@ -63,7 +63,7 @@ def train(loader, model, opt, loss_function, scaler):
   loop = tqdm(loader)
 
   train_loss = 0.0
-  for _, (data, targets) in enumerate(loop):
+  for _, (data, targets, _) in enumerate(loop):
     data = data.to(device = DEVICE)
     targets = targets.float().unsqueeze(1).to(device = DEVICE)
 
@@ -181,11 +181,10 @@ def main():
 
     plot_loss_curve(TRAIN_LOSSES, 'plots/loss2.png')
 
-  # for imagens de teste; calcular o dice score dessa imagem, assim como a predição dela; colocar a predição numa pasta no formato {nome do modelo}_{numero da execução}_{nome da imagem}.png; exportar o vetor de dice score como dataframe
   dice_scores = metrics(test_loader, model, mode = 'test', device = DEVICE)
   dice_scores = np.array(dice_scores)
-  df = pd.DataFrame(dice_scores)
-  df.to_csv('dice_scores.csv', index=False, encoding='utf-8')
+  df = pd.DataFrame(dice_scores, columns=['dice_score', 'filename'])
+  df.to_csv('dice_scores2.csv', index=False, encoding='utf-8')
 
   # print predictions in a folder
   save_preds(test_loader, model, num_exec=1, folder = "test_images_pred/", device = DEVICE)

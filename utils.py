@@ -1,6 +1,7 @@
 import os
 import torch
 import torchvision
+import numpy as np
 from sklearn.model_selection import train_test_split
 from dataset import RatsDataset
 from torch.utils.data import DataLoader
@@ -91,7 +92,7 @@ def metrics(loader, model, mode = 'val', device="cuda"):
         num_pixels = 0
 
         with torch.no_grad():
-            for x, y in loader:
+            for x, y, _ in loader:
                 x = x.to(device)
                 y = y.to(device).unsqueeze(1)
                 preds = torch.sigmoid(model(x))
@@ -107,14 +108,15 @@ def metrics(loader, model, mode = 'val', device="cuda"):
     elif mode == 'test':
         dice_scores = []
         with torch.no_grad():
-            for x, y in loader:
+            for x, y, fname in loader:
                 x = x.to(device)
                 y = y.to(device).unsqueeze(1)
                 preds = torch.sigmoid(model(x))
                 preds = (preds > 0.5).float()
 
                 dice_score = (2. * (preds * y).sum()) / ((preds + y).sum() + 1e-8)
-                dice_scores.append(dice_score)
+                dice_score = np.array(dice_score)
+                dice_scores.append((dice_score, ''.join(fname)))
         
         model.train()
 
@@ -132,14 +134,14 @@ def save_preds(loader, model, num_exec, folder="test_images_pred/", device="cuda
 
     model.eval()
     
-    for idx, (x, y) in enumerate(loader):
+    for x, y, fname in loader:
         x = x.to(device=device)
         with torch.no_grad():
             preds = torch.sigmoid(model(x))
             preds = (preds > 0.5).float()
         #{nome do modelo}_{numero da execução}_{nome da imagem}.png
-        torchvision.utils.save_image(preds, f"{folder}/{model.name}_{num_exec}_{idx}.png")
-        torchvision.utils.save_image(y.unsqueeze(1), f"{folder}{idx}.png")
+        torchvision.utils.save_image(preds, f"{folder}/{model.name}_{num_exec}_{''.join(fname)}")
+        torchvision.utils.save_image(y.unsqueeze(1), f"{folder}{''.join(fname)}")
 
     model.train()
 
