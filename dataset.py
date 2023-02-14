@@ -16,8 +16,9 @@ class RatsDataset(Dataset):
     return len(self.images)
   
   def __getitem__(self, idx):
-    img_path = os.path.join(self.img_dir, self.images[idx])
-    mask_path = os.path.join(self.mask_dir, self.images[idx].replace(".png", "_mask.png"))
+    fname = self.images[idx]
+    img_path = os.path.join(self.img_dir, fname)
+    mask_path = os.path.join(self.mask_dir, fname.replace(".png", "_mask.png"))
 
     image = np.array(Image.open(img_path).convert('RGB'))
     mask = np.array(Image.open(mask_path).convert('L'), dtype = np.float32)
@@ -29,6 +30,6 @@ class RatsDataset(Dataset):
       image = augmentations['image']
       mask = augmentations['mask']
 
-    return image, mask
+    return image, mask, fname
 
 # -----------------------------------------------------------------------------------------------
