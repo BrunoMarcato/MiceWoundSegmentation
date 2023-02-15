@@ -11,6 +11,7 @@ from utils import (
    load_checkpoint,
    save_checkpoint,
    get_loaders,
+   get_fnames_from_loader,
    metrics,
    save_preds,
    plot_loss_curve,
@@ -24,11 +25,13 @@ from utils import (
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 LEARNING_RATE = 1e-3
 BATCH_SIZE = 2
-NUM_EPOCHS = 1
+NUM_RUNS = 5 # if you change this parameter, change 'SEEDS' too
+NUM_EPOCHS = 50
 IMAGE_HEIGHT = 256
 IMAGE_WIDTH = 256
 TEST_SIZE = 0.2
 VAL_SIZE = 0.1 # percentage over training images 
+SEEDS = [1, 90, 4, 32, 7, 10]
 NUM_WORKERS = 2
 LOAD_MODEL = False
 PIN_MEMORY = True
@@ -133,61 +136,77 @@ def main():
         ]
     )
 
-  model = UNet(in_channels = 3, out_channels = 1).to(DEVICE)
-  loss_function = nn.BCEWithLogitsLoss() #binary cross entropy with logits
-  optimizer = optim.Adam(model.parameters(), lr = LEARNING_RATE)
+  global SEEDS
+  SEEDS = iter(SEEDS)
 
-  split_dataset(ROOT_DIR, 
-    TRAIN_IMG_DIR,
-    TRAIN_MASK_DIR,
-    VAL_IMG_DIR,
-    VAL_MASK_DIR,
-    TEST_IMG_DIR,
-    TEST_MASK_DIR,
-    test_size = TEST_SIZE,
-    val_size = VAL_SIZE,
-    seed = 2
-  )
+  df = pd.DataFrame()
+  for run in range(NUM_RUNS):
 
-  train_loader, val_loader, test_loader = get_loaders(
+    print(f'RUN {run+1}...', end='\n\n')
+
+    model = UNet(in_channels = 3, out_channels = 1).to(DEVICE)
+    loss_function = nn.BCEWithLogitsLoss() #binary cross entropy with logits
+    optimizer = optim.Adam(model.parameters(), lr = LEARNING_RATE)
+
+    split_dataset(ROOT_DIR, 
       TRAIN_IMG_DIR,
       TRAIN_MASK_DIR,
       VAL_IMG_DIR,
       VAL_MASK_DIR,
       TEST_IMG_DIR,
       TEST_MASK_DIR,
-      BATCH_SIZE,
-      train_transforms,
-      val_transforms,
-      test_transforms,
-      NUM_WORKERS,
-      PIN_MEMORY
-  )
+      test_size = TEST_SIZE,
+      val_size = VAL_SIZE,
+      seed = next(SEEDS)
+    )
 
-  if LOAD_MODEL:
-    load_checkpoint(torch.load("my_checkpoint.pth.tar"), model)
+    train_loader, val_loader, test_loader = get_loaders(
+        TRAIN_IMG_DIR,
+        TRAIN_MASK_DIR,
+        VAL_IMG_DIR,
+        VAL_MASK_DIR,
+        TEST_IMG_DIR,
+        TEST_MASK_DIR,
+        BATCH_SIZE,
+        train_transforms,
+        val_transforms,
+        test_transforms,
+        NUM_WORKERS,
+        PIN_MEMORY
+    )
 
-  scaler = torch.cuda.amp.GradScaler()
-  for _ in range(NUM_EPOCHS):
-    #perform the train steps (forward, backward)
-    train(train_loader, model, optimizer, loss_function, scaler)
+    if LOAD_MODEL:
+      load_checkpoint(torch.load("my_checkpoint.pth.tar"), model)
 
-    # save the model
-    checkpoint = {"state": model.state_dict(), "optimizer": optimizer.state_dict()}
-    save_checkpoint(checkpoint)
+    scaler = torch.cuda.amp.GradScaler()
+    for epoch in range(NUM_EPOCHS):
+      print(f'EPOCH {epoch+1}...', end='\n\n')
 
-    # check some metrics (accuracy, dice score)
-    metrics(val_loader, model, mode = 'val', device = DEVICE)
+      #perform the train steps (forward, backward)
+      train(train_loader, model, optimizer, loss_function, scaler)
 
-    plot_loss_curve(TRAIN_LOSSES, 'plots/loss2.png')
+      # save the model
+      checkpoint = {"state": model.state_dict(), "optimizer": optimizer.state_dict()}
+      save_checkpoint(checkpoint)
 
-  dice_scores = metrics(test_loader, model, mode = 'test', device = DEVICE)
-  dice_scores = np.array(dice_scores)
-  df = pd.DataFrame(dice_scores, columns=['dice_score', 'filename'])
-  df.to_csv('dice_scores2.csv', index=False, encoding='utf-8')
+      # check some metrics (accuracy, dice score)
+      metrics(val_loader, model, mode = 'val', device = DEVICE)
 
-  # print predictions in a folder
-  save_preds(test_loader, model, num_exec=1, folder = "test_images_pred/", device = DEVICE)
+      plot_loss_curve(TRAIN_LOSSES, f'plots/loss_{model.name}_run{run+1}.png')
+
+    # get the dice_score and filenames lists and add them to DataFrame as column
+    dice_scores = metrics(test_loader, model, mode = 'test', device = DEVICE)
+    df[f'{model.name}_run{run+1}'] = pd.Series(dice_scores)
+    df[f'filename_run{run+1}'] = pd.Series(get_fnames_from_loader(test_loader), name = 'filename')
+
+    # print predictions in a folder
+    save_preds(test_loader, model, num_run = run+1, folder = "test_images_pred/", device = DEVICE)
+
+    #clear the loss list to plot the next model loss
+    TRAIN_LOSSES.clear()
+
+  # save the DataFrame as .csv file
+  df.to_csv(f'{model.name}_dice_scores.csv', index=False, encoding='utf-8')
 
 # -----------------------------------------------------------------------------------------------
 

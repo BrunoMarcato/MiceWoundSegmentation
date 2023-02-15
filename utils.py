@@ -82,6 +82,15 @@ def get_loaders(
 
 # -----------------------------------------------------------------------------------------------
 
+def get_fnames_from_loader(loader):
+    names = []
+    for _, _, fname in loader:
+        names.append(''.join(fname))
+
+    return names
+
+# -----------------------------------------------------------------------------------------------
+
 def metrics(loader, model, mode = 'val', device="cuda"):
     dice_score = 0
 
@@ -108,7 +117,7 @@ def metrics(loader, model, mode = 'val', device="cuda"):
     elif mode == 'test':
         dice_scores = []
         with torch.no_grad():
-            for x, y, fname in loader:
+            for x, y, _ in loader:
                 x = x.to(device)
                 y = y.to(device).unsqueeze(1)
                 preds = torch.sigmoid(model(x))
@@ -116,7 +125,7 @@ def metrics(loader, model, mode = 'val', device="cuda"):
 
                 dice_score = (2. * (preds * y).sum()) / ((preds + y).sum() + 1e-8)
                 dice_score = np.array(dice_score)
-                dice_scores.append((dice_score, ''.join(fname)))
+                dice_scores.append(dice_score)
         
         model.train()
 
@@ -130,18 +139,17 @@ def metrics(loader, model, mode = 'val', device="cuda"):
 
 # -----------------------------------------------------------------------------------------------
 
-def save_preds(loader, model, num_exec, folder="test_images_pred/", device="cuda"):
+def save_preds(loader, model, num_run, folder="test_images_pred/", device="cuda"):
 
     model.eval()
     
-    for x, y, fname in loader:
+    for x, _, fname in loader:
         x = x.to(device=device)
         with torch.no_grad():
             preds = torch.sigmoid(model(x))
             preds = (preds > 0.5).float()
-        #{nome do modelo}_{numero da execução}_{nome da imagem}.png
-        torchvision.utils.save_image(preds, f"{folder}/{model.name}_{num_exec}_{''.join(fname)}")
-        torchvision.utils.save_image(y.unsqueeze(1), f"{folder}{''.join(fname)}")
+
+        torchvision.utils.save_image(preds, f"{folder}/{model.name}_run{num_run}_{''.join(fname)}")
 
     model.train()
 
