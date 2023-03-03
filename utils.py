@@ -5,7 +5,6 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from dataset import RatsDataset
 from torch.utils.data import DataLoader
-import matplotlib.pyplot as plt
 from shutil import copy2
 
 # -----------------------------------------------------------------------------------------------
@@ -16,9 +15,10 @@ def save_checkpoint(state, filename = "my_checkpoint.pth.tar"):
 
 # -----------------------------------------------------------------------------------------------
 
-def load_checkpoint(checkpoint, model):
+def load_checkpoint(checkpoint, model, optimizer):
   print("... Loading checkpoint ...")
   model.load_state_dict(checkpoint["state_dict"])
+  optimizer.load_state_dict(checkpoint["optimizer"])
 
 # -----------------------------------------------------------------------------------------------
 
@@ -91,7 +91,7 @@ def get_fnames_from_loader(loader):
 
 # -----------------------------------------------------------------------------------------------
 
-def metrics(loader, model, mode = 'val', device="cuda"):
+def metrics(loader, model, summary_writer, epoch = None, mode = 'val', device="cuda"):
     dice_score = 0
 
     model.eval()
@@ -109,21 +109,26 @@ def metrics(loader, model, mode = 'val', device="cuda"):
                 num_correct += (preds == y).sum()
                 num_pixels += torch.numel(preds)
                 dice_score += (2. * (preds * y).sum()) / ((preds + y).sum() + 1e-8)
-                
+
+        summary_writer.add_scalar("Val_Dice_Score", dice_score/len(loader), epoch)
+
         print(f"--> Correct pixels: {num_correct}; Total pixels: {num_pixels}")
         print(f"--> Accuracy: {num_correct/num_pixels*100:.2f}")
-        print(f"--> Dice score: {dice_score/len(loader)}")
+        print(f"--> Dice score: {(dice_score/len(loader)):.4f}")
     
     elif mode == 'test':
         dice_scores = []
         with torch.no_grad():
-            for x, y, _ in loader:
+            for num, (x, y, _) in enumerate(loader):
                 x = x.to(device)
                 y = y.to(device).unsqueeze(1)
                 preds = torch.sigmoid(model(x))
                 preds = (preds > 0.5).float()
 
                 dice_score = (2. * (preds * y).sum()) / ((preds + y).sum() + 1e-8)
+
+                summary_writer.add_scalar("Test_Dice_Score", dice_score, num)
+
                 dice_score = np.array(dice_score)
                 dice_scores.append(dice_score)
         
@@ -152,20 +157,6 @@ def save_preds(loader, model, num_run, folder="test_images_pred/", device="cuda"
         torchvision.utils.save_image(preds, f"{folder}/{model.name}_run{num_run}_{''.join(fname)}")
 
     model.train()
-
-# -----------------------------------------------------------------------------------------------
-
-def plot_loss_curve(train_loss, path):
-    #plt.legend('Train/Validation Losses')
-    plt.xlabel('Epochs')
-    plt.ylabel('Loss')
-
-    #plt.yticks(np.arange(0, 1, 0.1))
-
-    plt.plot(train_loss, color='blue')
-    #plt.plot(val_loss, color='red')
-
-    plt.savefig(path)
 
 # -----------------------------------------------------------------------------------------------
 

@@ -6,6 +6,7 @@ from tqdm import tqdm
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torchvision
 from model import UNet
 from utils import (
    load_checkpoint,
@@ -14,9 +15,10 @@ from utils import (
    get_fnames_from_loader,
    metrics,
    save_preds,
-   plot_loss_curve,
    split_dataset
 )
+
+from torch.utils.tensorboard import SummaryWriter
 
 # -----------------------------------------------------------------------------------------------
 
@@ -26,7 +28,7 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 LEARNING_RATE = 1e-3
 BATCH_SIZE = 2
 NUM_RUNS = 5 # if you change this parameter, change 'SEEDS' too
-NUM_EPOCHS = 50
+NUM_EPOCHS = 1
 IMAGE_HEIGHT = 256
 IMAGE_WIDTH = 256
 TEST_SIZE = 0.2
@@ -51,7 +53,7 @@ TRAIN_LOSSES = []
 
 # -----------------------------------------------------------------------------------------------
 
-def train(loader, model, opt, loss_function, scaler):
+def train(loader, model, opt, loss_function, scaler, summary_writer, epoch):
   '''Train function. 
 
     Args:
@@ -60,6 +62,8 @@ def train(loader, model, opt, loss_function, scaler):
       opt: The optimizer that will be used to train
       loss_function: The loss function that will be used to train 
       scaler: To do mixed precision training
+      summary_writer: Tensorboard summary writer
+      epoch: Current epoch
 
     '''
 
@@ -87,6 +91,7 @@ def train(loader, model, opt, loss_function, scaler):
     loop.set_postfix(loss = loss.item())
 
   TRAIN_LOSSES.append(train_loss)
+  summary_writer.add_scalar('Loss', train_loss, epoch)
 
 # -----------------------------------------------------------------------------------------------
 
@@ -175,38 +180,42 @@ def main():
         PIN_MEMORY
     )
 
+    # To visualize a batch and the model
+    tb = SummaryWriter()
+    images, _, _ = next(iter(train_loader))
+    grid = torchvision.utils.make_grid(images)
+    tb.add_image('images', grid)
+    tb.add_graph(model, images)
+
     if LOAD_MODEL:
-      load_checkpoint(torch.load("my_checkpoint.pth.tar"), model)
+      load_checkpoint(torch.load("my_checkpoint.pth.tar"), model, optimizer)
 
     scaler = torch.cuda.amp.GradScaler()
     for epoch in range(NUM_EPOCHS):
       print(f'EPOCH {epoch+1}...', end='\n\n')
 
       #perform the train steps (forward, backward)
-      train(train_loader, model, optimizer, loss_function, scaler)
+      train(train_loader, model, optimizer, loss_function, scaler, tb, epoch)
 
       # save the model
-      checkpoint = {"state": model.state_dict(), "optimizer": optimizer.state_dict()}
+      checkpoint = {"state_dict": model.state_dict(), "optimizer": optimizer.state_dict()}
       save_checkpoint(checkpoint)
 
       # check some metrics (accuracy, dice score)
-      metrics(val_loader, model, mode = 'val', device = DEVICE)
-
-      plot_loss_curve(TRAIN_LOSSES, f'plots/loss_{model.name}_run{run+1}.png')
+      metrics(val_loader, model, summary_writer = tb, epoch = epoch, mode = 'val', device = DEVICE)
 
     # get the dice_score and filenames lists and add them to DataFrame as column
-    dice_scores = metrics(test_loader, model, mode = 'test', device = DEVICE)
+    dice_scores = metrics(test_loader, model, summary_writer = tb, mode = 'test', device = DEVICE)
     df[f'{model.name}_run{run+1}'] = pd.Series(dice_scores)
     df[f'filename_run{run+1}'] = pd.Series(get_fnames_from_loader(test_loader), name = 'filename')
 
     # print predictions in a folder
     save_preds(test_loader, model, num_run = run+1, folder = "test_images_pred/", device = DEVICE)
 
-    #clear the loss list to plot the next model loss
-    TRAIN_LOSSES.clear()
-
   # save the DataFrame as .csv file
   df.to_csv(f'{model.name}_dice_scores.csv', index=False, encoding='utf-8')
+
+  tb.close()
 
 # -----------------------------------------------------------------------------------------------
 
