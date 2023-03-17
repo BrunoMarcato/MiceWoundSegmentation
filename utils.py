@@ -3,7 +3,7 @@ import torch
 import torchvision
 import numpy as np
 from sklearn.model_selection import train_test_split
-from dataset import RatsDataset
+from UNet.dataset import RatsDataset
 from torch.utils.data import DataLoader
 from shutil import copy2
 
