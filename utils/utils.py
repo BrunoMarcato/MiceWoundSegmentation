@@ -2,23 +2,31 @@ import os
 import torch
 import torchvision
 import numpy as np
+import cv2
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import f1_score
 from UNet.dataset import RatsDataset
 from torch.utils.data import DataLoader
 from shutil import copy2
+import pickle
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 # -----------------------------------------------------------------------------------------------
 
-def save_checkpoint(state, filename = "my_checkpoint.pth.tar"):
-  print("... Saving checkpoint ...")
-  torch.save(state, filename)
+def save_model(model, filename = "/model"):
+  print("... Saving model ...")
+  with open(filename, 'wb') as file:
+    pickle.dump(model, file)
 
 # -----------------------------------------------------------------------------------------------
 
-def load_checkpoint(checkpoint, model, optimizer):
-  print("... Loading checkpoint ...")
-  model.load_state_dict(checkpoint["state_dict"])
-  optimizer.load_state_dict(checkpoint["optimizer"])
+def load_model(filename):
+    print("... Loading model ...")
+    with open(filename, 'rb') as file:
+        model = pickle.load(file)
+
+    return model
 
 # -----------------------------------------------------------------------------------------------
 
@@ -91,7 +99,8 @@ def get_fnames_from_loader(loader):
 
 # -----------------------------------------------------------------------------------------------
 
-def metrics(loader, model, summary_writer, epoch = None, mode = 'val', device="cuda"):
+#metrics for unet
+def metrics_unet(loader, model, summary_writer, epoch = None, mode = 'val', device="cuda"):
     dice_score = 0
 
     model.eval()
@@ -99,7 +108,7 @@ def metrics(loader, model, summary_writer, epoch = None, mode = 'val', device="c
     if mode == 'val':
         num_correct = 0
         num_pixels = 0
-
+        score = 0
         with torch.no_grad():
             for x, y, _ in loader:
                 x = x.to(device)
@@ -108,16 +117,17 @@ def metrics(loader, model, summary_writer, epoch = None, mode = 'val', device="c
                 preds = (preds > 0.5).float()
                 num_correct += (preds == y).sum()
                 num_pixels += torch.numel(preds)
-                dice_score += (2. * (preds * y).sum()) / ((preds + y).sum() + 1e-8)
+                score += f1_score(y.cpu().numpy().flatten(), preds.cpu().numpy().flatten())
+                #(2. * (preds * y).sum()) / ((preds + y).sum() + 1e-8)
 
-        summary_writer.add_scalar("Val_Dice_Score", dice_score/len(loader), epoch)
+        summary_writer.add_scalar("Val_Dice_Score", score/len(loader), epoch)
 
         print(f"--> Correct pixels: {num_correct}; Total pixels: {num_pixels}")
         print(f"--> Accuracy: {num_correct/num_pixels*100:.2f}")
-        print(f"--> Dice score: {(dice_score/len(loader)):.4f}")
+        print(f"--> Dice score: {(score/len(loader)):.4f}")
     
     elif mode == 'test':
-        dice_scores = []
+        f1scores = []
         with torch.no_grad():
             for num, (x, y, _) in enumerate(loader):
                 x = x.to(device)
@@ -125,16 +135,17 @@ def metrics(loader, model, summary_writer, epoch = None, mode = 'val', device="c
                 preds = torch.sigmoid(model(x))
                 preds = (preds > 0.5).float()
 
-                dice_score = (2. * (preds * y).sum()) / ((preds + y).sum() + 1e-8)
+                score = f1_score(y.cpu().numpy().flatten(), preds.cpu().numpy().flatten())
 
-                summary_writer.add_scalar("Test_Dice_Score", dice_score, num)
+                summary_writer.add_scalar("Test_Dice_Score", score, num)
 
-                dice_score = np.array(dice_score)
-                dice_scores.append(dice_score)
+                f1scores.append(score)
         
+        f1scores = np.array(score)
+
         model.train()
 
-        return dice_scores
+        return f1scores
 
     else:
         raise ValueError(f'{mode} is an invalid mode. Allowed values: [\'val\',  \'test\']')
@@ -144,7 +155,8 @@ def metrics(loader, model, summary_writer, epoch = None, mode = 'val', device="c
 
 # -----------------------------------------------------------------------------------------------
 
-def save_preds(loader, model, num_run, folder="test_images_pred/", device="cuda"):
+#Save predictions from UNet
+def save_preds(loader, model, num_run, folder="UNet/test_images_pred", device="cuda"):
 
     model.eval()
     
