@@ -101,7 +101,6 @@ def get_fnames_from_loader(loader):
 
 #metrics for unet
 def metrics_unet(loader, model, summary_writer, epoch = None, mode = 'val', device="cuda"):
-    dice_score = 0
 
     model.eval()
 
@@ -141,7 +140,7 @@ def metrics_unet(loader, model, summary_writer, epoch = None, mode = 'val', devi
 
                 f1scores.append(score)
         
-        f1scores = np.array(score)
+        f1scores = np.array(f1scores)
 
         model.train()
 
