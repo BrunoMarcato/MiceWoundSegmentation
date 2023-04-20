@@ -1,11 +1,9 @@
 import pandas as pd
 
 import matplotlib.pyplot as plt
-from matplotlib.colors import to_rgba
-import seaborn as sns
 
-df_RF = pd.read_csv('boxplots/RandomForest_dice_scores.csv')
-df_Unet = pd.read_csv('boxplots/Unet_dice_scores.csv')
+df_RF = pd.read_csv('boxplots/RandomForest_f1_scores.csv')
+df_Unet = pd.read_csv('boxplots/Unet_f1_scores.csv')
 
 df_RF.drop(df_RF.columns[[1, 3, 5, 7, 9]], axis=1, inplace=True)
 df_Unet.drop(df_Unet.columns[[1, 3, 5, 7, 9]], axis=1, inplace=True)
@@ -21,7 +19,13 @@ boxplot = plt.boxplot(df_boxplot, labels=['RF', 'UNet'], patch_artist=True, medi
 
 for body in violin['bodies']:
     body.set_facecolor('cyan')
-    body.set_alpha(0.7)
+    body.set_alpha(0.9)
 
+plt.title('Box plot and Violin plot')
+plt.xlabel('Algorithms')
+plt.ylabel('F1 Scores')
 
-plt.show()
+plt.grid()
+
+plt.savefig('boxplots/boxplot_RF_UNet.pdf')
+plt.close()
