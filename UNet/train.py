@@ -1,4 +1,3 @@
-import numpy as np
 import pandas as pd
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
@@ -8,12 +7,12 @@ import torch.nn as nn
 import torch.optim as optim
 import torchvision
 from model import UNet
-from utils import (
-   load_checkpoint,
-   save_checkpoint,
+from utils.utils import (
+   load_model,
+   save_model,
    get_loaders,
    get_fnames_from_loader,
-   metrics,
+   metrics_unet,
    save_preds,
    split_dataset
 )
@@ -25,16 +24,16 @@ from torch.utils.tensorboard import SummaryWriter
 # Hyper params
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-LEARNING_RATE = 1e-3
+LEARNING_RATE = 1e-4
 BATCH_SIZE = 2
 NUM_RUNS = 5 # if you change this parameter, change 'SEEDS' too
-NUM_EPOCHS = 1
+NUM_EPOCHS = 100
 IMAGE_HEIGHT = 256
 IMAGE_WIDTH = 256
-TEST_SIZE = 0.2
-VAL_SIZE = 0.1 # percentage over training images 
-SEEDS = [1, 90, 4, 32, 7, 10]
-NUM_WORKERS = 2
+TEST_SIZE = 0.3
+VAL_SIZE = 0.2 # percentage over training images 
+SEEDS = range(NUM_RUNS)
+NUM_WORKERS = 7
 LOAD_MODEL = False
 PIN_MEMORY = True
 ROOT_DIR = "data/all_data"
@@ -114,24 +113,21 @@ def main():
   val_transforms = A.Compose(
       [
           A.Resize(height=IMAGE_HEIGHT, width=IMAGE_WIDTH),
-            A.Rotate(limit=35, p=1.0),
-            A.HorizontalFlip(p=0.5),
-            A.VerticalFlip(p=0.1),
-            A.Normalize(
-                mean=[0.0, 0.0, 0.0],
-                std=[1.0, 1.0, 1.0],
-                max_pixel_value=255.0,
-            ),
-            ToTensorV2(),
+          A.Rotate(limit=35, p=1.0),
+          A.HorizontalFlip(p=0.5),
+          A.VerticalFlip(p=0.1),
+          A.Normalize(
+              mean=[0.0, 0.0, 0.0],
+              std=[1.0, 1.0, 1.0],
+              max_pixel_value=255.0,
+          ),
+          ToTensorV2(),
       ]
   )
 
   test_transforms = A.Compose(
         [
             A.Resize(height=IMAGE_HEIGHT, width=IMAGE_WIDTH),
-            A.Rotate(limit=35, p=1.0),
-            A.HorizontalFlip(p=0.5),
-            A.VerticalFlip(p=0.1),
             A.Normalize(
                 mean=[0.0, 0.0, 0.0],
                 std=[1.0, 1.0, 1.0],
@@ -188,7 +184,7 @@ def main():
     tb.add_graph(model, images)
 
     if LOAD_MODEL:
-      load_checkpoint(torch.load("my_checkpoint.pth.tar"), model, optimizer)
+      model = load_model(filename = f'UNet/models/{model.name}_run{run+1}')
 
     scaler = torch.cuda.amp.GradScaler()
     for epoch in range(NUM_EPOCHS):
@@ -197,23 +193,22 @@ def main():
       #perform the train steps (forward, backward)
       train(train_loader, model, optimizer, loss_function, scaler, tb, epoch)
 
-      # save the model
-      checkpoint = {"state_dict": model.state_dict(), "optimizer": optimizer.state_dict()}
-      save_checkpoint(checkpoint)
-
       # check some metrics (accuracy, dice score)
-      metrics(val_loader, model, summary_writer = tb, epoch = epoch, mode = 'val', device = DEVICE)
+      metrics_unet(val_loader, model, summary_writer = tb, epoch = epoch, mode = 'val', device = DEVICE)
 
     # get the dice_score and filenames lists and add them to DataFrame as column
-    dice_scores = metrics(test_loader, model, summary_writer = tb, mode = 'test', device = DEVICE)
-    df[f'{model.name}_run{run+1}'] = pd.Series(dice_scores)
+    f1scores = metrics_unet(test_loader, model, summary_writer = tb, mode = 'test', device = DEVICE)
+    df[f'{model.name}_run{run+1}'] = pd.Series(f1scores)
     df[f'filename_run{run+1}'] = pd.Series(get_fnames_from_loader(test_loader), name = 'filename')
 
     # print predictions in a folder
-    save_preds(test_loader, model, num_run = run+1, folder = "test_images_pred/", device = DEVICE)
+    save_preds(test_loader, model, num_run = run+1, folder = "UNet/prediction_images", device = DEVICE)
+
+    # save the model
+    save_model(model, filename = f'UNet/models/{model.name}_run{run+1}')
 
   # save the DataFrame as .csv file
-  df.to_csv(f'{model.name}_dice_scores.csv', index=False, encoding='utf-8')
+  df.to_csv(f'boxplots\{model.name}_dice_scores.csv', index=False, encoding='utf-8')
 
   tb.close()
 
