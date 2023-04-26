@@ -193,7 +193,7 @@ def main():
       #perform the train steps (forward, backward)
       train(train_loader, model, optimizer, loss_function, scaler, tb, epoch)
 
-      # check some metrics (accuracy, dice score)
+      # check some metrics (accuracy, f1 score)
       metrics_unet(val_loader, model, summary_writer = tb, epoch = epoch, mode = 'val', device = DEVICE)
 
     # get the dice_score and filenames lists and add them to DataFrame as column
@@ -208,7 +208,7 @@ def main():
     save_model(model, filename = f'UNet/models/{model.name}_run{run+1}')
 
   # save the DataFrame as .csv file
-  df.to_csv(f'boxplots\{model.name}_dice_scores.csv', index=False, encoding='utf-8')
+  df.to_csv(f'boxplots/{model.name}_f1_scores.csv', index=False, encoding='utf-8')
 
   tb.close()
 
