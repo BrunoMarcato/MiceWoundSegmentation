@@ -1,4 +1,6 @@
 # ----------------------------------------------------------
+install.packages('ggplot2')
+install.packages('reshape2')
 # ----------------------------------------------------------
 
 set.seed(42)
@@ -11,8 +13,8 @@ library(reshape2)
 # Reading data
 # ----------------------------------------------------------
 
-rf.df   = read.csv("./../results/RandomForest_f1_scores.csv") 
-unet.df = read.csv("./../results/Unet_f1_scores.csv")
+rf.df   = read.csv("results/RandomForest_f1_scores.csv") 
+unet.df = read.csv("results/Unet_f1_scores.csv")
 
 # ----------------------------------------------------------
 # Organize data RF data
