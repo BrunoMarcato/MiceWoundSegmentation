@@ -274,36 +274,35 @@ unet.avg = unet.avg[order(unet.avg$FScore),]
 
 scoresByImage = cbind(rf.avg, unet.avg)
 colnames(scoresByImage) = c("RF.id", "RF.FScore", "RF.IoU", "UNet.id", "UNet.FScore", "UNet.Iou")
-# write.csv(scoresByImage, "./scoresByImage.csv")
-
+write.csv(scoresByImage, "./scoresByImage.csv")
 
 # 12 images with fscore < 0.5
-# print(scoresByImage[1:12,])
+print(scoresByImage[1:12,])
 
 # ------------
-# heatmp
+# heatmap
 # ------------
 
-# rf.avg$algo   = "RF"
-# unet.avg$algo = "UNET"
+cat(" @Plot: heatmap\n")
+rf.avg$algo   = "RF"
+unet.avg$algo = "UNET"
 
-# rf.avg$id   = as.factor(rf.avg$id)
-# unet.avg$id = as.factor(unet.avg$id)
+rf.avg$id   = as.factor(rf.avg$id)
+unet.avg$id = as.factor(unet.avg$id)
+
+df.avg = rbind(rf.avg, unet.avg)
+df.hm  = melt(df.avg, id.vars = c(1, 4))
+
+g2 = ggplot(df.hm, aes(x = (id), y = algo, fill = value))
+g2 = g2 + geom_tile() + theme_bw() + facet_grid(variable~.)
+g2 = g2 + scale_fill_gradient2(low = "red", high = "blue", mid = "white", 
+	midpoint = 0.5, na.value = "grey50")
+g2 = g2 +theme(axis.text.x=element_text(size=7))
+g2 = g2 + theme(axis.text.x=element_text(angle = 90, hjust = 1))
+g2 = g2 + labs(x = "Image ID", y = "Algorithm")
+ggsave(g2,filename = "predictionsPlot.pdf", width = 6.78, height = 2.44)
 
 
-# df.avg = rbind(rf.avg, unet.avg)
-
-# g2 = ggplot(df.avg, aes(x = id, y = algo, fill = fscore))
-# g2 = g2 + geom_tile() + theme_bw()
-# g2 = g2 + scale_fill_gradient2(low = "red", high = "blue", mid = "white", 
-# 	midpoint = 0.5, na.value = "grey50")
-# g2 = g2 +theme(axis.text.x=element_text(size=7))
-# g2 = g2 + theme(axis.text.x=element_text(angle = 90, hjust = 1))
-# g2 = g2 + labs(x = "Image ID", y = "Algorithm")
-# g2 
-# ggsave(g2,filename = "predictionsPlot.pdf", width = 6.87, heigth = 1.92)
-# Saving 6.87 x 1.92 in image
-# g3 + scale_x_discrete(guide = guide_axis(n.dodge = 2))
-
+cat("Finished :) \n")
 # ----------------------------------------------------------
 # ----------------------------------------------------------
