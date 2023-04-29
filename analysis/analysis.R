@@ -241,37 +241,39 @@ if(obj.jac$p.value < 0.05) {
 # RF
 # ------------
 
-# rf.ids = unique(rf.full$id)
-# aux.rf = lapply(rf.ids, function(id) {
-# 	# print(id)
-# 	sel = rf.full[which(rf.full$id == id),]
-# 	return(mean(sel$fscore))
-# })
+rf.ids = unique(rf.full$id)
+aux.rf = lapply(rf.ids, function(id) {
+	sel.fsc = rf.full.fsc[which(rf.full.fsc$id == id),]
+	sel.jac = rf.full.jac[which(rf.full.jac$id == id),]
+	return(c(mean(sel.fsc$value), mean(sel.jac$value)))
+})
 
-# rf.avg = data.frame(cbind(rf.ids, unlist(aux.rf)))
-# colnames(rf.avg) = c("id", "fscore")
-# rf.avg = rf.avg[order(rf.avg$fscore),]
+do.call("rbind", aux.rf)
+
+rf.avg = data.frame(cbind(rf.ids, do.call("rbind", aux.rf)))
+colnames(rf.avg) = c("id", "FScore", "IoU")
+rf.avg = rf.avg[order(rf.avg$FScore),]
 
 # # ------------
 # # UNET
 # # ------------
 
-# unet.ids = unique(unet.full$id)
-# aux.unet = lapply(unet.ids, function(id) {
-# 	# print(id)
-# 	sel = unet.full[which(unet.full$id == id),]
-# 	return(mean(sel$fscore))
-# })
+unet.ids = unique(unet.full$id)
+aux.unet = lapply(unet.ids, function(id) {
+	sel.fsc = unet.full.fsc[which(unet.full.fsc$id == id),]
+	sel.jac = unet.full.jac[which(unet.full.jac$id == id),]
+	return(c(mean(sel.fsc$value), mean(sel.jac$value)))
+})
 
-# unet.avg = data.frame(cbind(unet.ids, unlist(aux.unet)))
-# colnames(unet.avg) = c("id", "fscore")
-# unet.avg = unet.avg[order(unet.avg$fscore),]
+unet.avg = data.frame(cbind(unet.ids, do.call("rbind", aux.unet)))
+colnames(unet.avg) = c("id", "FScore", "IoU")
+unet.avg = unet.avg[order(unet.avg$FScore),]
 
 # ------------
 # ------------
 
-# scoresByImage = cbind(rf.avg, unet.avg)
-# colnames(scoresByImage) = c("RF.id", "RF.fscore", "Unet.id", "Unet.fscore")
+scoresByImage = cbind(rf.avg, unet.avg)
+colnames(scoresByImage) = c("RF.id", "RF.FScore", "RF.IoU", "UNet.id", "UNet.FScore", "UNet.Iou")
 # write.csv(scoresByImage, "./scoresByImage.csv")
 
 
