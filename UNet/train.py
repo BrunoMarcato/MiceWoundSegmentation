@@ -208,7 +208,7 @@ def main():
     save_model(model, filename = f'UNet/models/{model.name}_run{run+1}')
 
   # save the DataFrame as .csv file
-  df.to_csv(f'boxplots/{model.name}_f1_scores.csv', index=False, encoding='utf-8')
+  df.to_csv(f'analysis/{model.name}_f1_scores.csv', index=False, encoding='utf-8')
 
   tb.close()
 
