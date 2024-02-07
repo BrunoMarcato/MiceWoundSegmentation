@@ -1,218 +1,162 @@
-import pandas as pd
-import albumentations as A
-from albumentations.pytorch import ToTensorV2
-from tqdm import tqdm
+from sklearn.metrics import f1_score, jaccard_score
+from sklearn.model_selection import KFold
+
+import torchvision
+import torchvision.transforms as transforms
 import torch
 import torch.nn as nn
-import torch.optim as optim
-import torchvision
+import numpy as np
+import albumentations as A
+from tqdm import tqdm
+import pandas as pd
+
 from model import UNet
-from utils.utils import (
-   load_model,
-   save_model,
-   get_loaders,
-   get_fnames_from_loader,
-   metrics_unet,
-   save_preds,
-   split_dataset
-)
+from dataset import RatsDataset
+from augment import offline_augment
+
+from utils import save_model
 
 from torch.utils.tensorboard import SummaryWriter
 
 # -----------------------------------------------------------------------------------------------
 
-# Hyper params
+# Hyper params and others
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-LEARNING_RATE = 1e-4
-BATCH_SIZE = 2
-NUM_RUNS = 5 # if you change this parameter, change 'SEEDS' too
-NUM_EPOCHS = 100
+LEARNING_RATE = 1e-3
+BATCH_SIZE = 16
+FOLDS = 5
+NUM_EPOCHS = 50
 IMAGE_HEIGHT = 256
 IMAGE_WIDTH = 256
-TEST_SIZE = 0.3
-VAL_SIZE = 0.2 # percentage over training images 
-SEEDS = range(NUM_RUNS)
-NUM_WORKERS = 7
-LOAD_MODEL = False
-PIN_MEMORY = True
-ROOT_DIR = "data/all_data"
-TRAIN_IMG_DIR = "data/train_images/"
-TRAIN_MASK_DIR = "data/train_masks/"
-VAL_IMG_DIR = "data/val_images/"
-VAL_MASK_DIR = "data/val_masks/"
-TEST_IMG_DIR = "data/test_images/"
-TEST_MASK_DIR = "data/test_masks/"
+IMG_DIR = "data/images"
+MASK_DIR = "data/masks"
 
 # -----------------------------------------------------------------------------------------------
 
-# List to store the losses from each epoch
 
-TRAIN_LOSSES = []
+def train(model, device, train_loader, optimizer, epoch, scaler):
+    loop = tqdm(train_loader)
+    train_loss = 0.0
 
-# -----------------------------------------------------------------------------------------------
+    model.train()
+    for batch_idx, (data, target, _) in enumerate(loop):
+        data, target = data.to(device), target.float().unsqueeze(1).to(device)
 
-def train(loader, model, opt, loss_function, scaler, summary_writer, epoch):
-  '''Train function. 
+        #forward pass
+        with torch.cuda.amp.autocast():
+            output = model(data)
+            loss = loss_func(output, target)
 
-    Args:
-      loader: The data loader
-      model: Model to be trained 
-      opt: The optimizer that will be used to train
-      loss_function: The loss function that will be used to train 
-      scaler: To do mixed precision training
-      summary_writer: Tensorboard summary writer
-      epoch: Current epoch
+        # backward pass
+        optimizer.zero_grad()
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
 
-    '''
+        train_loss += loss.item()
 
-  loop = tqdm(loader)
-
-  train_loss = 0.0
-  for _, (data, targets, _) in enumerate(loop):
-    data = data.to(device = DEVICE)
-    targets = targets.float().unsqueeze(1).to(device = DEVICE)
-
-    # forward pass
-    with torch.cuda.amp.autocast():
-      preds = model(data)
-      loss = loss_function(preds, targets)
-
-    # backward pass
-    opt.zero_grad()
-    scaler.scale(loss).backward()
-    scaler.step(opt)
-    scaler.update()
-
-    train_loss += loss.item()
-
-    # update tqdm loop
-    loop.set_postfix(loss = loss.item())
-
-  TRAIN_LOSSES.append(train_loss)
-  summary_writer.add_scalar('Loss', train_loss, epoch)
+        loop.set_postfix(loss = loss.item())
+        
+    tb.add_scalar('Loss', train_loss, epoch)
+    return train_loss
 
 # -----------------------------------------------------------------------------------------------
 
-def main():
-  train_transforms = A.Compose(
-        [
-            A.Resize(height=IMAGE_HEIGHT, width=IMAGE_WIDTH),
-            A.Rotate(limit=35, p=1.0),
-            A.HorizontalFlip(p=1.0),
-            A.VerticalFlip(p=1.0),
-            A.Normalize(
-                mean=[0.0, 0.0, 0.0],
-                std=[1.0, 1.0, 1.0],
-                max_pixel_value=255.0,
-            ),
-            ToTensorV2(),
-        ]
-    )
-  
-  val_transforms = A.Compose(
-      [
-          A.Resize(height=IMAGE_HEIGHT, width=IMAGE_WIDTH),
-          A.Rotate(limit=35, p=1.0),
-          A.HorizontalFlip(p=1.0),
-          A.VerticalFlip(p=1.0),
-          A.Normalize(
-              mean=[0.0, 0.0, 0.0],
-              std=[1.0, 1.0, 1.0],
-              max_pixel_value=255.0,
-          ),
-          ToTensorV2(),
-      ]
-  )
+dataset = RatsDataset(img_dir = IMG_DIR, mask_dir = MASK_DIR)
 
-  test_transforms = A.Compose(
-        [
-            A.Resize(height=IMAGE_HEIGHT, width=IMAGE_WIDTH),
-            A.Normalize(
-                mean=[0.0, 0.0, 0.0],
-                std=[1.0, 1.0, 1.0],
-                max_pixel_value=255.0,
-            ),
-            ToTensorV2(),
-        ]
-    )
+transforms = [
+    A.Rotate(limit=45, p=1.0),
+    A.HorizontalFlip(p=1.0),
+    A.RandomBrightnessContrast(p=1.0),
+    A.ShiftScaleRotate(p=1.0),
+]
 
-  global SEEDS
-  SEEDS = iter(SEEDS)
+# Define the device (CPU or GPU)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-  df = pd.DataFrame()
-  for run in range(NUM_RUNS):
+# Initialize the k-fold cross validation
+kf = KFold(n_splits=FOLDS, shuffle=True)
 
-    print(f'RUN {run+1}...', end='\n\n')
+# To save f1 and jaccard scores from each fold
+scores = []
 
-    model = UNet(in_channels = 3, out_channels = 1).to(DEVICE)
-    loss_function = nn.BCEWithLogitsLoss() #binary cross entropy with logits
-    optimizer = optim.Adam(model.parameters(), lr = LEARNING_RATE)
+# Loop through each fold
+for fold, (train_idx, test_idx) in enumerate(kf.split(dataset)):
+    print(f"Fold {fold + 1}")
+    print("-------")
 
-    split_dataset(ROOT_DIR, 
-      TRAIN_IMG_DIR,
-      TRAIN_MASK_DIR,
-      VAL_IMG_DIR,
-      VAL_MASK_DIR,
-      TEST_IMG_DIR,
-      TEST_MASK_DIR,
-      test_size = TEST_SIZE,
-      val_size = VAL_SIZE,
-      seed = next(SEEDS)
-    )
-
-    train_loader, val_loader, test_loader = get_loaders(
-        TRAIN_IMG_DIR,
-        TRAIN_MASK_DIR,
-        VAL_IMG_DIR,
-        VAL_MASK_DIR,
-        TEST_IMG_DIR,
-        TEST_MASK_DIR,
-        BATCH_SIZE,
-        train_transforms,
-        val_transforms,
-        test_transforms,
-        NUM_WORKERS,
-        PIN_MEMORY
-    )
-
-    # To visualize a batch and the model
     tb = SummaryWriter()
-    images, _, _ = next(iter(train_loader))
-    grid = torchvision.utils.make_grid(images)
-    tb.add_image('images', grid)
-    tb.add_graph(model, images)
 
-    if LOAD_MODEL:
-      model = load_model(filename = f'UNet/models/{model.name}_run{run+1}')
+    train_dataset = torch.utils.data.Subset(dataset, train_idx)
+    train_dataset = offline_augment(train_dataset, transforms=transforms)
 
+    test_dataset = torch.utils.data.Subset(dataset, test_idx)
+    test_dataset = offline_augment(test_dataset, transforms=transforms, test=True)
+
+    # Define the data loaders for the current fold
+    train_loader = torch.utils.data.DataLoader(
+        dataset=train_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=True
+    )
+    
+    test_loader = torch.utils.data.DataLoader(
+        dataset=test_dataset,
+        batch_size=1,
+    )
+
+    # Initialize the model and optimizer
+    model = UNet(in_channels = 3, out_channels = 1).to(device)
+    loss_func = nn.BCEWithLogitsLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+
+    # Train the model on the current fold
     scaler = torch.cuda.amp.GradScaler()
     for epoch in range(NUM_EPOCHS):
-      print(f'EPOCH {epoch+1}...', end='\n\n')
+        print(f'EPOCH {epoch+1}')
+        train_loss = train(model, device, train_loader, optimizer, epoch, scaler)
 
-      #perform the train steps (forward, backward)
-      train(train_loader, model, optimizer, loss_function, scaler, tb, epoch)
+    # Evaluate the model on the test set
+    model.eval()
+    with torch.no_grad():
+        scores_run = []
+        for x, y, fname in test_loader:
+            x = x.to(device)
+            y = y.to(device).unsqueeze(1)
+            preds = torch.sigmoid(model(x))
+            preds = (preds > 0.5).float()
 
-      # check some metrics (accuracy, f1 score)
-      metrics_unet(val_loader, model, summary_writer = tb, epoch = epoch, mode = 'val', device = DEVICE)
+            #saving prediction as image
+            torchvision.utils.save_image(preds, f"{'UNet/pred_train_remake'}/{model.name}_run{fold+1}_{''.join(fname)}")
 
-    # get the dice_score and filenames lists and add them to DataFrame as column
-    f1scores = metrics_unet(test_loader, model, summary_writer = tb, mode = 'test', device = DEVICE)
-    df[f'{model.name}_run{run+1}'] = pd.Series(f1scores)
-    df[f'filename_run{run+1}'] = pd.Series(get_fnames_from_loader(test_loader), name = 'filename')
+            f1score = f1_score(y.cpu().numpy().flatten(), preds.cpu().numpy().flatten())
+            jaccardscore = jaccard_score(y.cpu().numpy().flatten(), preds.cpu().numpy().flatten())
 
-    # print predictions in a folder
-    save_preds(test_loader, model, num_run = run+1, folder = "UNet/prediction_images", device = DEVICE)
+            scores_run.append((f1score, jaccardscore, int(fname[0].split('.')[0])))
+    
+    scores += scores_run
 
-    # save the model
-    save_model(model, filename = f'UNet/models/{model.name}_run{run+1}')
+    scores_run = np.array(scores_run)
 
-  # save the DataFrame as .csv file
-  df.to_csv(f'analysis/{model.name}_f1_scores.csv', index=False, encoding='utf-8')
+    print(f'\nF1 SCORE\nMédia: {scores_run[:,0].mean()} / Desvio padrao: {scores_run[:,0].std()} \
+        \nJACCARD SCORE\nMédia: {scores_run[:,1].mean()} / Desvio padrao: {scores_run[:,1].std()} \
+        \nIMAGES: {scores_run[:,2]}')
 
-  tb.close()
+    save_model(model, optimizer, NUM_EPOCHS, train_loss, filename = f'UNet/models/{model.name}_run{fold+1}.pt')
 
-# -----------------------------------------------------------------------------------------------
+    tb.close()
 
-if __name__ == '__main__':
-  main()
+#print results
+scores = np.array(scores)
+print(f'\n\nF1 SCORE\nMédia: {scores[:,0].mean()} / Desvio padrao: {scores[:,0].std()} \
+      \n\nJACCARD SCORE\nMédia: {scores[:,1].mean()} / Desvio padrao: {scores[:,1].std()}')
+
+#create results dataframe
+results = pd.DataFrame(scores, columns=['F1 Score', 'Jaccard Score', 'Image Number']).astype({'Image Number': 'int32'})
+
+#sorting by Image Number
+results = results.sort_values('Image Number')
+
+#save dataframe as csv file
+results.to_csv(f'UNet/results/results.csv', index=False)

@@ -22,13 +22,15 @@ class RatsDataset(Dataset):
 
     image = np.array(Image.open(img_path).convert('RGB'))
     mask = np.array(Image.open(mask_path).convert('L'), dtype = np.float32)
-    #mask[mask == 255.0] = 1.0
     mask[mask == 38.0] = 1.0
 
     if self.transform != None:
-      augmentations = self.transform(image = image, mask = mask)
+      augmentations = self.transform(image = image, mask = mask) #Albumentation transforms
       image = augmentations['image']
       mask = augmentations['mask']
+
+      #image = self.transform(image) #torch transforms
+      #mask = self.transform(mask)
 
     return image, mask, fname
 
