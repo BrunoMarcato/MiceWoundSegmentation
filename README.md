@@ -1,4 +1,4 @@
-# Mice Scar Segmentation
+# Mice Wound Segmentation
 ---
 
 ---
