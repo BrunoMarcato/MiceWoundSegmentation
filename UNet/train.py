@@ -1,5 +1,8 @@
 '''Configure hyper params and train the model'''
 
+import argparse
+import random
+
 from sklearn.metrics import f1_score, jaccard_score
 from sklearn.model_selection import KFold
 
@@ -22,6 +25,23 @@ from torch.utils.tensorboard import SummaryWriter
 
 # -----------------------------------------------------------------------------------------------
 
+parser = argparse.ArgumentParser()
+parser.add_argument('--seed', type=int, default=42)
+args = parser.parse_args()
+SEED = args.seed
+
+# Setting the seeds for reproducibility
+
+torch.manual_seed(SEED)
+torch.cuda.manual_seed(SEED)
+torch.cuda.manual_seed_all(SEED)  # se você estiver usando várias GPUs
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+np.random.seed(SEED)
+random.seed(SEED)
+
+# -----------------------------------------------------------------------------------------------
+
 # Hyper params and others
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -35,8 +55,7 @@ IMG_DIR = "data/images"
 MASK_DIR = "data/masks"
 
 # -----------------------------------------------------------------------------------------------
-
-
+#pylint: disable=redefined-outer-name
 def train(model, device, train_loader, optimizer, epoch, scaler):
     '''
     Function to train the model.
@@ -56,7 +75,7 @@ def train(model, device, train_loader, optimizer, epoch, scaler):
     optimizer, and gradient scaler. It computes and updates the model parameters based on the provided data,
     calculates the training loss, and returns the total training loss for the epoch.
     '''
-        
+      
     loop = tqdm(train_loader)
     train_loss = 0.0
 
@@ -78,7 +97,7 @@ def train(model, device, train_loader, optimizer, epoch, scaler):
         train_loss += loss.item()
 
         loop.set_postfix(loss = loss.item())
-       
+     
     tb.add_scalar('Loss', train_loss, epoch)
     return train_loss
 
@@ -97,7 +116,7 @@ transforms = [
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Initialize the k-fold cross validation
-kf = KFold(n_splits=FOLDS, shuffle=True)
+kf = KFold(n_splits=FOLDS, shuffle=True, random_state=SEED)
 
 # To save f1 and jaccard scores from each fold
 scores = []
@@ -121,35 +140,34 @@ for fold, (train_idx, test_idx) in enumerate(kf.split(dataset)):
         batch_size=BATCH_SIZE,
         shuffle=True
     )
-   
     test_loader = torch.utils.data.DataLoader(
         dataset=test_dataset,
         batch_size=1,
     )
 
     # Initialize the model and optimizer
-    model = UNet(in_channels = 3, out_channels = 1).to(device)
+    MODEL = UNet(in_channels = 3, out_channels = 1).to(device)
     loss_func = nn.BCEWithLogitsLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    optimizer = torch.optim.Adam(MODEL.parameters(), lr=LEARNING_RATE)
 
     # Train the model on the current fold
     scaler = torch.cuda.amp.GradScaler()
     for epoch in range(NUM_EPOCHS):
         print(f'EPOCH {epoch+1}')
-        train_loss = train(model, device, train_loader, optimizer, epoch, scaler)
+        train_loss = train(MODEL, device, train_loader, optimizer, epoch, scaler)
 
     # Evaluate the model on the test set
-    model.eval()
+    MODEL.eval()
     with torch.no_grad():
         scores_run = []
         for x, y, fname in test_loader:
             x = x.to(device)
             y = y.to(device).unsqueeze(1)
-            preds = torch.sigmoid(model(x))
+            preds = torch.sigmoid(MODEL(x)) #pylint: disable=not-callable
             preds = (preds > 0.5).float()
 
             #saving prediction as image
-            torchvision.utils.save_image(preds, f"{'UNet/pred_train_remake'}/{model.name}_run{fold+1}_{''.join(fname)}")
+            torchvision.utils.save_image(preds, f"{'UNet/pred_train_remake'}/{MODEL.name}_run{fold+1}_{''.join(fname)}")
 
             f1score = f1_score(y.cpu().numpy().flatten(), preds.cpu().numpy().flatten())
             jaccardscore = jaccard_score(y.cpu().numpy().flatten(), preds.cpu().numpy().flatten())
@@ -164,7 +182,7 @@ for fold, (train_idx, test_idx) in enumerate(kf.split(dataset)):
         \nJACCARD SCORE\nMédia: {scores_run[:,1].mean()} / Desvio padrao: {scores_run[:,1].std()} \
         \nIMAGES: {scores_run[:,2]}')
 
-    save_model(model, optimizer, NUM_EPOCHS, train_loss, filename = f'UNet/models/{model.name}_run{fold+1}.pt')
+    save_model(MODEL, optimizer, NUM_EPOCHS, train_loss, filename = f'UNet/models/{MODEL.name}_run{fold+1}.pt')
 
     tb.close()
 
