@@ -1,10 +1,8 @@
+'''Configure hyper params and train the model'''
+
 from sklearn.metrics import f1_score, jaccard_score
 from sklearn.model_selection import KFold
 
-import torchvision
-import torchvision.transforms as transforms
-import torch
-import torch.nn as nn
 import numpy as np
 import albumentations as A
 from tqdm import tqdm
@@ -16,6 +14,10 @@ from augment import offline_augment
 
 from utils import save_model
 
+import torchvision
+from torchvision import transforms
+import torch
+from torch import nn
 from torch.utils.tensorboard import SummaryWriter
 
 # -----------------------------------------------------------------------------------------------
@@ -36,11 +38,30 @@ MASK_DIR = "data/masks"
 
 
 def train(model, device, train_loader, optimizer, epoch, scaler):
+    '''
+    Function to train the model.
+
+    Parameters:
+    - model (torch.nn.Module): The neural network model to be trained.
+    - device (torch.device): The device where the data will be loaded.
+    - train_loader (DataLoader): The DataLoader for training data.
+    - optimizer (torch.optim.Optimizer): The optimizer used for updating the model parameters.
+    - epoch (int): The current epoch number.
+    - scaler (torch.cuda.amp.GradScaler): The gradient scaler for mixed precision training.
+
+    Returns:
+    - float: The total training loss for the epoch.
+
+    This function trains the specified neural network model for one epoch using the given training DataLoader,
+    optimizer, and gradient scaler. It computes and updates the model parameters based on the provided data,
+    calculates the training loss, and returns the total training loss for the epoch.
+    '''
+        
     loop = tqdm(train_loader)
     train_loss = 0.0
 
     model.train()
-    for batch_idx, (data, target, _) in enumerate(loop):
+    for _, (data, target, _) in enumerate(loop):
         data, target = data.to(device), target.float().unsqueeze(1).to(device)
 
         #forward pass
@@ -57,7 +78,7 @@ def train(model, device, train_loader, optimizer, epoch, scaler):
         train_loss += loss.item()
 
         loop.set_postfix(loss = loss.item())
-        
+       
     tb.add_scalar('Loss', train_loss, epoch)
     return train_loss
 
@@ -100,7 +121,7 @@ for fold, (train_idx, test_idx) in enumerate(kf.split(dataset)):
         batch_size=BATCH_SIZE,
         shuffle=True
     )
-    
+   
     test_loader = torch.utils.data.DataLoader(
         dataset=test_dataset,
         batch_size=1,
@@ -134,7 +155,7 @@ for fold, (train_idx, test_idx) in enumerate(kf.split(dataset)):
             jaccardscore = jaccard_score(y.cpu().numpy().flatten(), preds.cpu().numpy().flatten())
 
             scores_run.append((f1score, jaccardscore, int(fname[0].split('.')[0])))
-    
+   
     scores += scores_run
 
     scores_run = np.array(scores_run)
@@ -153,10 +174,10 @@ print(f'\n\nF1 SCORE\nMédia: {scores[:,0].mean()} / Desvio padrao: {scores[:,0]
       \n\nJACCARD SCORE\nMédia: {scores[:,1].mean()} / Desvio padrao: {scores[:,1].std()}')
 
 #create results dataframe
-results = pd.DataFrame(scores, columns=['F1 Score', 'Jaccard Score', 'Image Number']).astype({'Image Number': 'int32'})
+results = pd.DataFrame(scores, columns=['F1 Score', 'Jaccard Score', 'Image Number']).astype({'Image Number': 'int32'}) #pylint: disable='line-too-long'
 
 #sorting by Image Number
 results = results.sort_values('Image Number')
 
 #save dataframe as csv file
-results.to_csv(f'UNet/results/results.csv', index=False)
+results.to_csv('UNet/results/results.csv', index=False)
