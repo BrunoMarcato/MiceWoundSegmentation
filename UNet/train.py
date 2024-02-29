@@ -54,6 +54,10 @@ IMAGE_WIDTH = 256
 IMG_DIR = "data/images"
 MASK_DIR = "data/masks"
 
+#Early stop
+DELTA = 0.01
+EPOCHS_NO_IMPROVE = 10
+
 # -----------------------------------------------------------------------------------------------
 #pylint: disable=redefined-outer-name
 def train(model, device, train_loader, optimizer, epoch, scaler):
@@ -152,9 +156,22 @@ for fold, (train_idx, test_idx) in enumerate(kf.split(dataset)):
 
     # Train the model on the current fold
     scaler = torch.cuda.amp.GradScaler()
+
+    # to early stop
+    epochs_no_improve = 0
+    old_train_loss = float('inf')
     for epoch in range(NUM_EPOCHS):
         print(f'EPOCH {epoch+1}')
+
         train_loss = train(MODEL, device, train_loader, optimizer, epoch, scaler)
+
+        if old_train_loss - train_loss < DELTA:
+            epochs_no_improve += 1
+        
+        if epochs_no_improve == EPOCHS_NO_IMPROVE:
+            break
+
+        old_train_loss = train_loss
 
     # Evaluate the model on the test set
     MODEL.eval()
